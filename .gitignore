@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+dist/
+.work/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal

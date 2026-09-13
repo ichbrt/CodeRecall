@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { RecallEngine } from '../src/engine.js';
+import { RepositoryStore } from '../src/store.js';
+import { prepareReuse, provenance } from '../src/reuse.js';
+import { recordResult, runVerification, verifyProject } from '../src/verification.js';
+import { createFixtures, policy, prompt, sandbox, write } from './fixtures.js';
+
+test('milestone: index three repos, verify, select SaaS, plan delta, copy bytes, adapt, test and trace', async t => {
+  const env = await sandbox();
+  const fixtures = await createFixtures(env.root);
+  const store = new RepositoryStore(path.join(env.root, 'memory')); t.after(async () => { store.close(); await env.cleanup(); });
+  const engine = new RecallEngine(store);
+  const a = await engine.index(fixtures.a, policy);
+  const b = await engine.index(fixtures.b, policy);
+  const c = await engine.index(fixtures.c, policy);
+  assert.equal(engine.match(prompt).recommendedProject, null, 'unverified repositories cannot be selected for copying');
+  const verified = await verifyProject(store, a.id, [process.execPath, '--test', 'tests/core.test.mjs'], true);
+  assert.equal(verified.status, 'passed');
+  const match = engine.match(prompt);
+  assert.equal(match.recommendedProject, a.id);
+  assert.equal(match.candidates.find(candidate => candidate.projectId === c.id)?.decision, 'generate');
+  assert.equal(match.moduleCandidates.find(candidate => candidate.projectId === b.id)?.feature, 'booking');
+  const plan = engine.plan(a.id, prompt);
+  assert.ok(plan.agentInstructions[0]?.includes('never regenerate KEEP'));
+  const target = path.join(env.root, 'new-booking-saas');
+  const preview = await prepareReuse(store, plan.id, target);
+  assert.equal(preview.dryRun, true);
+  await assert.rejects(access(target));
+  const reused = await prepareReuse(store, plan.id, target, false);
+  assert.ok(reused.reuseId);
+  assert.equal(reused.metrics.generatedSourceTokens, 0);
+  for (const file of a.files) assert.deepEqual(await readFile(path.join(target, file.path)), await readFile(path.join(fixtures.a, file.path)), file.path);
+  for (const excluded of ['.git', '.env', 'node_modules', 'internal-notes.md', 'local-only.txt']) await assert.rejects(access(path.join(target, excluded)));
+  assert.equal((await provenance(store, target, 'src/auth/session.mjs')).reuseType, 'copied-verbatim');
+  // This explicitly represents the agent's delta; the reuse engine never generates it.
+  await write(target, 'src/booking/appointments.mjs', 'export function book(start, duration) { if (duration <= 0) throw new Error("Invalid duration"); return { start, end: start + duration }; }\n');
+  await write(target, 'tests/booking.test.mjs', 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { book } from "../src/booking/appointments.mjs";\ntest("booking delta", () => { assert.deepEqual(book(10,30), {start:10,end:40}); assert.throws(() => book(10,0)); });\n');
+  await writeFile(path.join(target, 'src/app/page.tsx'), 'export default function Page() { return <main>Booking workspace</main>; }\n');
+  const result = await recordResult(store, target, [process.execPath, '--test', 'tests/core.test.mjs', 'tests/booking.test.mjs'], true);
+  assert.equal(result.verification.status, 'passed');
+  assert.ok(result.unchanged.includes('src/auth/session.mjs'));
+  assert.deepEqual(result.modified, ['src/app/page.tsx']);
+  assert.deepEqual(result.added, ['src/booking/appointments.mjs', 'tests/booking.test.mjs']);
+  assert.equal(result.agentUsage, null, 'unknown token usage must not be fabricated');
+  assert.equal(result.targetCommit, null);
+  assert.equal((await provenance(store, target, 'src/app/page.tsx')).reuseType, 'copied-and-modified');
+  assert.equal(store.results(reused.reuseId!).length, 1);
+});
+
+test('copy refuses collisions, overlap, stale plan, dirty source and revoked permission', async t => {
+  const env = await sandbox();
+  const fixtures = await createFixtures(env.root);
+  const store = new RepositoryStore(path.join(env.root, 'memory')); t.after(async () => { store.close(); await env.cleanup(); });
+  const engine = new RecallEngine(store);
+  const source = await engine.index(fixtures.a, policy);
+  await verifyProject(store, source.id, [process.execPath, '--test', 'tests/core.test.mjs'], true);
+  const plan = engine.plan(source.id, prompt);
+  const occupied = path.join(env.root, 'occupied');
+  await mkdir(occupied); await write(occupied, 'important.txt', 'preserve');
+  await assert.rejects(prepareReuse(store, plan.id, occupied, false), /already exists/);
+  assert.equal(await readFile(path.join(occupied, 'important.txt'), 'utf8'), 'preserve');
+  await assert.rejects(prepareReuse(store, plan.id, path.join(fixtures.a, 'nested')), /overlap/);
+  await assert.rejects(prepareReuse(store, plan.id, path.join(store.directory, 'target')), /memory/);
+  const target = path.join(env.root, 'target');
+  await write(fixtures.a, 'src/auth/session.mjs', 'export function isAuthenticated() { return true; }');
+  await assert.rejects(prepareReuse(store, plan.id, target, false), /changed since planning/);
+  await assert.rejects(access(target));
+  const changed = await engine.index(fixtures.a);
+  assert.equal(changed.policy.permission, 'owned', 'reindex preserves explicit policy');
+  assert.equal(changed.verification, null, 'changed snapshots invalidate verification');
+  const newPlan = engine.plan(source.id, prompt);
+  await assert.rejects(prepareReuse(store, newPlan.id, target, false), /blocked/);
+  changed.policy = { ...policy, permission: 'denied' }; store.saveProject(changed);
+  await assert.rejects(prepareReuse(store, newPlan.id, target, false), /permission/);
+});
+
+test('verification requires trust, handles failure and timeout, refuses mutation during tests', async t => {
+  const env = await sandbox();
+  const fixtures = await createFixtures(env.root);
+  const store = new RepositoryStore(path.join(env.root, 'memory')); t.after(async () => { store.close(); await env.cleanup(); });
+  const engine = new RecallEngine(store);
+  const source = await engine.index(fixtures.a, policy);
+  await assert.rejects(verifyProject(store, source.id, [process.execPath, '--test', 'tests/core.test.mjs'], false), /trust/);
+  assert.equal((await verifyProject(store, source.id, [process.execPath, '-e', 'process.exit(7)'], true)).status, 'failed');
+  const timeout = await runVerification(fixtures.a, [process.execPath, '-e', 'setInterval(() => {}, 1000)'], source.snapshot, true, 100);
+  assert.equal(timeout.status, 'failed'); assert.equal(timeout.timedOut, true);
+  await assert.rejects(verifyProject(store, source.id, [process.execPath, '-e', 'require("node:fs").writeFileSync("src/auth/session.mjs", "changed")'], true), /changed during verification/);
+});
+
+test('SQLite persists fingerprints and plans across sessions without storing source bodies', async t => {
+  const env = await sandbox();
+  const fixtures = await createFixtures(env.root);
+  const directory = path.join(env.root, 'memory');
+  const store = new RepositoryStore(directory);
+  const engine = new RecallEngine(store);
+  const project = await engine.index(fixtures.a, policy);
+  const plan = engine.plan(project.id, prompt);
+  store.close();
+  const reopened = new RepositoryStore(directory); t.after(async () => { reopened.close(); await env.cleanup(); });
+  assert.equal(reopened.project(project.id).snapshot, project.snapshot);
+  assert.equal(reopened.plan(plan.id).sourceProject, project.id);
+  assert.equal((await readFile(path.join(directory, 'memory.db'))).includes(Buffer.from('return Boolean(session?.userId)')), false);
+});

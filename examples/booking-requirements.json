@@ -1,0 +1,9 @@
+{
+  "description": "Build a Next.js SaaS booking product with auth, subscriptions and admin.",
+  "features": ["auth", "billing", "admin", "booking"],
+  "platform": "web",
+  "frameworks": { "next": "^16.0.0" },
+  "runtime": "node",
+  "changes": [],
+  "removeFeatures": []
+}

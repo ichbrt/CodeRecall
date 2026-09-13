@@ -1,0 +1,7 @@
+{
+  "semantic": 0.7,
+  "technical": 0.85,
+  "structural": 0.65,
+  "health": 0.6,
+  "confidence": 0.7
+}
