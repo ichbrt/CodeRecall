@@ -116,6 +116,8 @@ coderecall doctor
 
 The multiline example uses POSIX continuation syntax. In PowerShell, put each command on one line and quote paths containing spaces. Executables are started without a shell; on Windows, use `node` and a script path for portable verification. Shell wrappers such as `npm.cmd` are not automatically enabled.
 
+Operation paths must not traverse symbolic links or junctions. On macOS, use the real `/private/var/...` path when working under the `/var/...` temporary-directory alias. Windows short names are resolved before checking scope, collisions and provenance.
+
 `index` never executes package scripts. `verify` is an opt-in execution boundary, **not a sandbox**. It ignores command stdout/stderr to avoid persisting test output that might contain secrets. A nonzero exit or timeout is recorded as failure. Run the same command yourself to inspect its diagnostics. The selected command's success does not prove test coverage, build correctness or security. Verification expires for reuse scoring after seven days or a snapshot change.
 
 Repositories without a permission attestation can be searched but cannot be copied. A repository's own manifest cannot grant ownership. License metadata and notices are retained; V0.1 does not interpret license compatibility or provide a license audit.

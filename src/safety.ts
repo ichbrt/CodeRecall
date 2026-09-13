@@ -48,6 +48,17 @@ export async function assertNoSymlinkComponents(target: string): Promise<void> {
   }
 }
 
+/** Resolve filesystem aliases without allowing symlinks; only the final component may be absent. */
+export async function canonicalOperationPath(target: string): Promise<string> {
+  await assertNoSymlinkComponents(target);
+  const absolute = path.resolve(target);
+  try { return await realpath(absolute); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return path.join(await realpath(path.dirname(absolute)), path.basename(absolute));
+  }
+}
+
 export async function repositoryRoot(input: string): Promise<string> {
   await assertNoSymlinkComponents(input);
   const root = await realpath(input);

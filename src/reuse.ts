@@ -4,14 +4,14 @@ import path from 'node:path';
 import type { AdaptationPlan, FileRecord, ReuseRecord } from './domain.js';
 import { fingerprint } from './analyzer.js';
 import { scoreProject } from './scoring.js';
-import { assertNoSymlinkComponents, hash, inside, inventory, secretDetected } from './safety.js';
+import { assertNoSymlinkComponents, canonicalOperationPath, hash, inside, inventory, secretDetected } from './safety.js';
 import { RepositoryStore } from './store.js';
 
 export async function validateDestination(source: string, input: string, memory: string): Promise<string> {
-  const destination = path.resolve(input);
-  await assertNoSymlinkComponents(destination);
-  if (inside(source, destination) || inside(destination, source)) throw new Error('Source and destination must not overlap.');
-  const memoryPath = path.resolve(memory);
+  const destination = await canonicalOperationPath(input);
+  const sourcePath = await canonicalOperationPath(source);
+  if (inside(sourcePath, destination) || inside(destination, sourcePath)) throw new Error('Source and destination must not overlap.');
+  const memoryPath = await canonicalOperationPath(memory);
   if (inside(memoryPath, destination) || inside(destination, memoryPath)) throw new Error('Destination must not overlap the memory directory.');
   try {
     await lstat(destination);

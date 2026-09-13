@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -53,7 +54,9 @@ test('MCP exposes six useful tools, respects scope and never exposes shell execu
   const list = await client.listTools();
   assert.equal(list.tools.length, 6);
   assert.ok(!list.tools.some(tool => /exec|shell|verify/.test(tool.name)));
-  const indexed = await client.callTool({ name: 'index_repository', arguments: { path: fixtures.a, policy } });
+  // Windows runners may expose TEMP via an 8.3 alias such as RUNNER~1.
+  const inputRoot = process.platform === 'win32' ? path.join(tmpdir(), path.basename(env.root)) : env.root;
+  const indexed = await client.callTool({ name: 'index_repository', arguments: { path: path.join(inputRoot, 'next-saas'), policy } });
   assert.notEqual(indexed.isError, true);
   assert.equal((await client.callTool({ name: 'index_repository', arguments: { path: fixtures.b } })).isError, true);
   assert.equal((await client.callTool({ name: 'inspect_project', arguments: { project: outside.id } })).isError, true);

@@ -8,7 +8,7 @@ import { createPlan } from './planner.js';
 import { parseRequirements, requirementsSchema } from './requirements.js';
 import { findModules, rankProjects } from './scoring.js';
 import { prepareReuse, provenance } from './reuse.js';
-import { assertNoSymlinkComponents, inside, secretDetected } from './safety.js';
+import { assertNoSymlinkComponents, canonicalOperationPath, inside, secretDetected } from './safety.js';
 import { RepositoryStore } from './store.js';
 
 export async function createMcpServer(store: RepositoryStore, allowedRoots: string[], enableCopy = false): Promise<McpServer> {
@@ -16,8 +16,7 @@ export async function createMcpServer(store: RepositoryStore, allowedRoots: stri
   const roots = await Promise.all(allowedRoots.map(async root => { await assertNoSymlinkComponents(root); return realpath(root); }));
   const inScope = (target: string) => roots.some(root => inside(root, path.resolve(target)));
   const checkScope = async (target: string) => {
-    if (!inScope(target)) throw new Error('Path is outside MCP allowed roots.');
-    await assertNoSymlinkComponents(target);
+    if (!inScope(await canonicalOperationPath(target))) throw new Error('Path is outside MCP allowed roots.');
   };
   const projects = () => store.listProjects().filter(project => inScope(project.root));
   const project = (id: string) => {

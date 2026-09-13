@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { git, inside } from '../src/safety.js';
@@ -55,7 +55,8 @@ export async function createFixtures(parent: string) {
 }
 
 export async function sandbox() {
-  const parent = path.resolve(tmpdir());
+  // macOS exposes its temporary directory through the /var symlink.
+  const parent = await realpath(tmpdir());
   const root = await mkdtemp(path.join(parent, 'coderecall-test-'));
   return {
     root,
