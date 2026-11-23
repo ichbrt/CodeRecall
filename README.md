@@ -197,3 +197,11 @@ V0.1 intentionally excludes a GUI, cloud SaaS, team service, universal language 
 CodeRecall is released under the [MIT License](LICENSE), copyright © 2026 Berat Demirci. Code you index retains its own license and ownership rules; this tool's MIT license does not grant permission to reuse someone else's repository.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and the [architecture decisions](docs/architecture.md). Bug reports, synthetic examples of incorrect matches, installation feedback and focused pull requests are welcome. Keep credentials and proprietary source out of public issues.
+
+## Enterprise support & custom AI agent / MCP engineering
+
+Need custom **Model Context Protocol (MCP) servers**, private multi-repo engineering memory, or production **AI agent orchestration with approval gates, spending limits, and audit logs** (like [LyngL](https://lyngl.com)) for your engineering team?
+
+- **Built & maintained by:** **Berat Demirci** — Founder at **SpaceBera**
+- **Products:** [LyngL (AI Workforce Platform)](https://lyngl.com) · [ACHTy AI (AI Search Visibility SaaS)](https://achty.com)
+- **Commercial consulting & contracts:** [beratdemirci@spacebera.com](mailto:beratdemirci@spacebera.com) · [LinkedIn](https://www.linkedin.com/in/spacebera)
