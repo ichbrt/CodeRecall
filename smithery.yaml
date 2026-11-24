@@ -3,10 +3,14 @@ startCommand:
   type: stdio
   configSchema:
     type: object
-    properties: {}
+    properties:
+      allowRoot:
+        type: string
+        default: "."
+        description: "Root directory CodeRecall is allowed to index and inspect"
   commandFunction:
     |-
     (config) => ({
       command: 'node',
-      args: ['dist/cli.js', 'mcp']
+      args: ['dist/cli.js', 'mcp', '--allow-root', config.allowRoot || process.cwd()]
     })
